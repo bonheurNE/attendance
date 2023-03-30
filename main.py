@@ -56,6 +56,7 @@ class mainWindow(QMainWindow):
         
         
         self.monitorCsvFileChanges()
+        self.initialiseVariables()
         
         self.ui.pushButton.clicked.connect(lambda:self.startThread())
         self.ui.pushButton_2.clicked.connect(lambda:self.endThread())
@@ -65,7 +66,14 @@ class mainWindow(QMainWindow):
         self.ui.dataTableView.setModel(self.model)
         
         
-        
+    def initialiseVariables(self):
+        self.scanned_roll_number = ""
+        self.scanned_status = 1
+        self.current_date = str(self.current_time())
+        pass
+    # fuction to manage scanning
+    def scanned(self):
+        return (self.scanned_roll_number,self.scanned_status,self.current_date)
     def closeEvent(self, event):
         # close the thread if the thread is open
         if self.status:
@@ -79,10 +87,59 @@ class mainWindow(QMainWindow):
     def populate(self):
         """
         for this part i think that the best idea would be to use the sqlite3 db th=able
-        than i will thake the roll number and check if it exist in the table 
+        than i will take the roll number and check if it exist in the table 
         - if it exist we update the modified date and  we increment the attendance number 
-        - if it does not exists we add that rool number as a number record
+        - if it does not exists we add that roll number as a number record
         """
+        # create the connection to the db
+        db_path = f"{self.document_main_path}/ATTENDANCES/attendances.db"
+        
+        connection = sqlite3.connect(db_path)
+        
+        # creating the cursor to use that db
+        cursor = connection.cursor()
+        
+        roll_number = self.scanned_roll_number
+        # sql statement to get all data into the database
+        sql = """
+        SELECT * FROM attendances WHERE rollNumber = ?;
+        """
+        
+        cursor.execute(sql,(roll_number,))
+        
+        result = cursor.fetchone()
+        
+        # check if the data is in the table or not
+        if result is not None:
+            NEW_STATUS = int(result[2]) + 1
+            # the data exists
+            # update the data
+            data = (NEW_STATUS, self.current_date, self.scanned_roll_number)
+            
+            # sql query
+            sql3 = """
+            UPDATE attendances SET status = ?,last_modified_date = ? WHERE rollNumber = ?;
+            """
+            # execute the update query
+            cursor.execute(sql3, data)
+            # Commit the transaction to save the changes to the database
+            connection.commit()
+        else:
+            # the data does not exists
+            data = (self.scanned_roll_number,self.scanned_status,self.current_date,self.current_date)
+            # insert it as a new record
+            sql2 = "INSERT INTO attendances (rollNumber,status,creation_date,last_modified_date) VALUES (?,?,?,?);"
+            
+            # execute the insert query
+            cursor.execute(sql2,data)
+            
+            # Commit the transaction to save the changes to the database
+            connection.commit()
+            
+        # close the cursor and the connection to the db
+        cursor.close()
+        connection.close()
+            
         # function to manage serial communication data read and commitment to the csv file
         with open(self.csv_file_name, 'a', newline = "") as csv_f:
             writer = csv.writer(csv_f)
@@ -165,6 +222,7 @@ class mainWindow(QMainWindow):
             
             # create database and connect to it
             db_path = f"{self.document_main_path}/ATTENDANCES/attendances.db"
+            
             connection = sqlite3.connect(db_path)
             
             # creating the cursor to use that db
